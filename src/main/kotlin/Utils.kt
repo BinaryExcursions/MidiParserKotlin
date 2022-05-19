@@ -1,4 +1,5 @@
 import jdk.jfr.Unsigned
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.*
 
 class Utils
@@ -79,18 +80,17 @@ class Utils
 
 		//I think this really will only ever be a UInt32 - MAX!
 		//The pais returned is the new index followed by the variables length bytes read
-		fun readVariableLengthValue(startIdx:Int, data:ByteArray) : Pair<Int, UInt>//UInt
+		fun readVariableLengthValue(startIdx:AtomicInteger, data:ByteArray) : UInt?
 		{
-			if( (startIdx <= 0) || (startIdx >= data.size) ) return Pair<Int, UInt>(startIdx, 0u)
+			if( (startIdx.get() <= 0) || (startIdx.get() >= data.size) ) return null
 
-			var idx:Int = startIdx
 			var numberOfBytesRead:Int = 0 //We know we're going to read at least one byte
 
 			var totalValue:UInt = 0u
 			var valueAtByteValue:UByte
 
 			do {
-				valueAtByteValue = data[startIdx].toUByte()
+				valueAtByteValue = data[startIdx.get()].toUByte()
 
 				//You MUST clear out the leading bit before adding it to our deltatime value! Just simply
 				//ALWAYS doing it since it does no harm regardless if the leading bit is 0 or 1
@@ -100,11 +100,11 @@ class Utils
 				totalValue = totalValue shl (numberOfBytesRead * 8)//First shift our stored value. 8 because it is the size of a byte
 				totalValue += deltaTimeValueToAdd.toUInt()
 
-				idx += 1
+				startIdx.incrementAndGet()
 				numberOfBytesRead += 1
 			}while ((valueAtByteValue and MSB_TEST_VALUE) == MSB_TEST_VALUE)
 
-			return Pair<Int, UInt>(idx, totalValue)
+			return totalValue
 		}
 
 		fun timeSignatureFromNumeratorDenominator(numerator:UByte, denominator:UByte) : TimingInfo

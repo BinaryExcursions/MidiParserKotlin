@@ -1,7 +1,5 @@
 import java.util.concurrent.atomic.AtomicInteger
 
-//import kotlin.native.concurrent.AutomicInt
-
 val filePath:String = "/Users/president/Desktop/FooSimple.mid"
 
 fun main(args: Array<String>)

@@ -28,31 +28,29 @@ class MidiEventParser
 		val SYS_COMMON_MSG_CTRl:UByte = 0xF0u
 		val SYS_DATA_TYPE_CTRL:UByte = 0x08u
 
-		var evt:IEvent?
-
-		if( (messageValue and SYS_COMMON_MSG_CTRl) == SYS_COMMON_MSG_CTRl) { //Looking at the high 4 bits of the byte
+		val evt:IEvent? = if( (messageValue and SYS_COMMON_MSG_CTRl) == SYS_COMMON_MSG_CTRl) { //Looking at the high 4 bits of the byte
 			//Looking at the lower 4 bits of the byte but more specifically the first bit - if set = Sys Realtime if not sys common.
 			//ie: If the last 4 bits are > 8 (ie: 0xF8 - 0xFD) its a sys realtime, but if less than 8 (ie: 0xF0 - 0xF7) It's a sys common message
 			val dataInfoVal:UByte = messageValue and SYS_DATA_TYPE_CTRL
 
 			if(dataInfoVal == SYS_DATA_TYPE_CTRL)
-				evt = parseSystemRealTimeMessage(messageValue, startIdx)
+				parseSystemRealTimeMessage(messageValue) //, startIdx)
 			else
-				evt = parseSystemExclusiveCommonMessage(messageValue, startIdx)
+				parseSystemExclusiveCommonMessage(messageValue, startIdx)
 		}
 		else {
-			evt = parseChannelMessageType(messageValue, startIdx)
+			parseChannelMessageType(messageValue, startIdx)
 		}
 
 		return evt
 	}
 
-	private fun parseChannelMessageType(messageValue:UByte, startIdx:AtomicInteger) : MidiChannelEvent?
+	private fun parseChannelMessageType(messageValue:UByte, startIdx:AtomicInteger) : IEvent? //MidiChannelEvent?
 	{
 		val CHANNEL_CTRL:UByte = 0x0Fu
 		val chnl:UByte = messageValue and CHANNEL_CTRL
 
-		var byteRead:UByte = 0x0u
+		var byteRead:UByte
 
 		if( (messageValue and MidiMajorMessage.NOTE_OFF.num) == messageValue) {
 			byteRead = m_Data!![startIdx.get()].toUByte() //Reading the key note
@@ -65,7 +63,8 @@ class MidiEventParser
 			byteRead = m_Data!![startIdx.get()].toUByte() //Reading the Velocity
 			startIdx.incrementAndGet()
 
-			return null // MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, noteVelocity:byteRead, musicalNote:musicalNote, eventType:.NOTE_OFF)
+			//return null // MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, noteVelocity:byteRead, musicalNote:musicalNote, eventType:.NOTE_OFF)
+			return MidiNoteOffEvent(timeDelta = m_TimeDelta, musicalNote = musicalNote, channel=chnl, noteVelocity = byteRead)
 		}
 		else if( (messageValue and MidiMajorMessage.NOTE_ON.num) == messageValue) {
 			byteRead = m_Data!![startIdx.get()].toUByte() //Reading the key note
@@ -78,7 +77,8 @@ class MidiEventParser
 			byteRead = m_Data!![startIdx.get()].toUByte() //Reading the Velocity
 			startIdx.incrementAndGet()
 
-			return null //MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, noteVelocity:byteRead, musicalNote:musicalNote, eventType:.NOTE_ON)
+			//MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, noteVelocity:byteRead, musicalNote:musicalNote, eventType:.NOTE_ON)
+			return MidiNoteOnEvent(timeDelta = m_TimeDelta, musicalNote = musicalNote, channel=chnl, noteVelocity = byteRead)
 		}
 		else if( (messageValue and MidiMajorMessage.KEY_PRESSURE_AFTER_TOUCH.num) == messageValue) {
 			byteRead = m_Data!![startIdx.get()].toUByte() //Reading the key note
@@ -91,7 +91,8 @@ class MidiEventParser
 			byteRead = m_Data!![startIdx.get()].toUByte()//Reading the Pressure
 			startIdx.incrementAndGet()
 
-			return null // MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, pressure:byteRead, musicalNote:musicalNote, eventType:.KEY_PRESSURE_AFTER_TOUCH)
+			// MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, pressure:byteRead, musicalNote:musicalNote, eventType:.KEY_PRESSURE_AFTER_TOUCH)
+			return MidiPolyphonicKeyPressureEvent(timeDelta = m_TimeDelta, channel = chnl, musicalNote = musicalNote, pressure = byteRead)
 		}
 		else if( (messageValue and MidiMajorMessage.CONTROL_CHANGE.num) == messageValue) {
 			val byte1:UByte = m_Data!![startIdx.get()].toUByte() //Reading the controller number
@@ -100,22 +101,25 @@ class MidiEventParser
 			byteRead = m_Data!![startIdx.get()].toUByte() //Reading the new control value
 			startIdx.incrementAndGet()
 
-			return null // MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, controllerNumber:byte1, controllerChangeValue:byteRead, eventType:.CONTROL_CHANGE)
+			// MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, controllerNumber:byte1, controllerChangeValue:byteRead, eventType:.CONTROL_CHANGE)
+			return MidiControlChangeEvent(timeDelta = m_TimeDelta, channel = chnl, controllerNumber = byte1, controllerChangeValue = byteRead)
 		}
 		else if( (messageValue and MidiMajorMessage.PROGRAM_CHANGE.num) == messageValue) {
 			byteRead = m_Data!![startIdx.get()].toUByte() //Reading the new program number
 			startIdx.incrementAndGet()
 
-			return null // MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, programNumber:byteRead, eventType:.PROGRAM_CHANGE)
+			// MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, programNumber:byteRead, eventType:.PROGRAM_CHANGE)
+			return MidiProgramChangeEvent(timeDelta = m_TimeDelta, channel = chnl, programNumber = byteRead)
 		}
 		else if( (messageValue and MidiMajorMessage.CHANNEL_PRESSURE_AFTER_TOUCH.num) == messageValue) {
 			byteRead = m_Data!![startIdx.get()].toUByte() //Reading the pressure value
 			startIdx.incrementAndGet()
 
-			return null //MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, pressure:byteRead, eventType:.CHANNEL_PRESSURE_AFTER_TOUCH)
+			//MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, pressure:byteRead, eventType:.CHANNEL_PRESSURE_AFTER_TOUCH)
+			return MidiChannelPressureEvent(timeDelta = m_TimeDelta, channel = chnl, pressure = byteRead)
 		}
 		else if( (messageValue and MidiMajorMessage.PITCH_WHEEL_CHANGE.num) == messageValue) {
-			var pitch:UShort = 0x0000u
+			var pitch:UShort
 
 			var lsb:UByte = m_Data!![startIdx.get()].toUByte() //Reading the least significant bits value
 			startIdx.incrementAndGet()
@@ -134,7 +138,8 @@ class MidiEventParser
 
 			pitch = (pitch + lsb.toUShort()).toUShort()
 
-			return null // MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, pitchWheelChange:pitch, eventType:.PITCH_WHEEL_CHANGE)
+			// MidiChannelEvent(eventTimeDelta:m_TimeDelta, channel:chnl, pitchWheelChange:pitch, eventType:.PITCH_WHEEL_CHANGE)
+			return MidiPitchWheelEvent(timeDelta = m_TimeDelta, channel = chnl, pitchWheelChange = pitch)
 		}
 
 		return null
@@ -179,13 +184,13 @@ class MidiEventParser
 		return null//SysExclusionEvent(eventTimeDelta: m_TimeDelta, exclusiveInfo: bytes ?? [])
 	}
 
-	private fun parseSystemRealTimeMessage(messageValue:UByte, idx:AtomicInteger) : IEvent?
+	private fun parseSystemRealTimeMessage(messageValue:UByte /*, startIdx: AtomicInteger*/) : IEvent?
 	{
 		val SYS_MSG_IDENTIFIER_CTRL:UByte = 0x07u//So we can evaluate the lower 3 bits to identify the specific message
-		var messageInfo:Pair<MidiMajorMessage, UByte?> = Pair<MidiMajorMessage, UByte?>(MidiMajorMessage.UNDEFINED, null)
+		//var messageInfo:Pair<MidiMajorMessage, UByte?> = Pair<MidiMajorMessage, UByte?>(MidiMajorMessage.UNDEFINED, null)
 		//var messageInfo:Pair<>(msg:MidiMajorMessage, channel:UInt8?) = (.UNDEFINED, nil)
 
-		var midiMessage:MidiMajorMessage = MidiMajorMessage.UNDEFINED
+		var midiMessage:MidiMajorMessage
 
 		when((messageValue and SYS_MSG_IDENTIFIER_CTRL).toInt()) {
 			0 ->
