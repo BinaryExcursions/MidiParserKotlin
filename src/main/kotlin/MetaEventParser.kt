@@ -1,5 +1,11 @@
 import java.util.concurrent.atomic.AtomicInteger
 
+/**
+ * NOTE: When reading the MIDI spec for Meta-Events:
+ * 2 lower case letters:  8-Bits
+ * 4 lower case letters: 16-Bits
+ * 6 lower case letters: 24-Bits
+ */
 class MetaEventParser
 {
 	private var m_Data:ByteArray? = null
@@ -29,7 +35,7 @@ class MetaEventParser
 			return null
 		}
 
-		var event:IEvent? = null//parseAppropriateMetaEvent(startIdx:&startIdx, eventType:metaEventType)
+		var event:IEvent? = parseAppropriateMetaEvent(startIdx, metaEventType)
 
 		m_Data = null
 
@@ -41,22 +47,16 @@ class MetaEventParser
 		var event:IEvent? = null
 
 		when(eventType) {
+			MetaEventDefinitions.TEXT_INFO, //0xFF01,
+			MetaEventDefinitions.COPYRIGHT, //0xFF02 -
+			MetaEventDefinitions.TEXT_SEQUENCE, //0xFF03 -
+			MetaEventDefinitions.TEXT_INSTRUMENT, //0xFF04 -
+			MetaEventDefinitions.TEXT_LYRIC, //0xFF05 -
+			MetaEventDefinitions.TEXT_MARKER, //0xFF06 -
+			MetaEventDefinitions.TEXT_CUE_POINT -> //0xFF07 -
+				event = parseTextEvent(startIdx, eventType)
 			MetaEventDefinitions.SEQUENCE_NUMBER ->
 				event = parseSeqNumber(startIdx)
-			MetaEventDefinitions.TEXT_INFO ->
-				event = parseTextEvent(startIdx)
-			MetaEventDefinitions.COPYRIGHT ->
-				event = parseCopyright(startIdx)
-			MetaEventDefinitions.TEXT_SEQUENCE ->
-				event = parseTextSequence(startIdx)
-			MetaEventDefinitions.TEXT_INSTRUMENT ->
-				event = parseTextInstrument(startIdx)
-			MetaEventDefinitions.TEXT_LYRIC ->
-				event = parseTextLyric(startIdx)
-			MetaEventDefinitions.TEXT_MARKER ->
-				event = parseTextMarker(startIdx)
-			MetaEventDefinitions.TEXT_CUE_POINT ->
-				event = parseTextCuePoint(startIdx)
 			MetaEventDefinitions.MIDI_CHANNEL ->
 				event = parseMidiChannel(startIdx)
 			MetaEventDefinitions.PORT_SELECTION ->
@@ -67,12 +67,12 @@ class MetaEventParser
 				event = parseSmpte(startIdx)
 			MetaEventDefinitions.TIME_SIGNATURE ->
 				event = parseTimeSignature(startIdx)
-			MetaEventDefinitions.MINI_TIME_SIGNATURE ->
-				event = parseMiniTimeSignature(startIdx)
+			MetaEventDefinitions.KEY_SIGNATURE ->
+				event = parseKeySignature(startIdx)
 			MetaEventDefinitions.SPECIAL_SEQUENCE ->
 				event = parseSpecialSequence(startIdx)
 			MetaEventDefinitions.END_OF_TRACK ->//0xFF2F
-				{} //Already handled
+				{} //Already handled when we validated the track chunk
 			else ->
 				{}
 		}
@@ -83,8 +83,12 @@ class MetaEventParser
 	//0xFF00 - Will be followed by 02 then the sequence number
 	private fun parseSeqNumber(startIdx:AtomicInteger) : IEvent?
 	{
-		//return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.SEQUENCE_NUMBER)
-		return null
+		val seqNum:UInt? = Utils.readVariableLengthValue(startIdx, m_Data!!)
+
+		if(seqNum == null) return null
+
+		//This particular event uses two bytes maximum for the sequence number
+		return MetaEventSequenceNumber(metaEventType = MetaEventDefinitions.SEQUENCE_NUMBER, sequenceNumber = seqNum.toUShort())
 	}
 
 	//All 0xFF2[0 - F]
@@ -100,17 +104,16 @@ class MetaEventParser
 		//to perform an extra validation here.
 		if(constByte.toUInt() != 0x01u) return null //Casting because Kotlin has serious issues handling unsigend variables across the board
 
-
 		val midiChannel:UByte = m_Data!![startIdx.get()].toUByte()
 		startIdx.incrementAndGet()
 
 		Printer.printUInt8AsHex(midiChannel)
 
-//		return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.MIDI_CHANNEL)
-		return null
+		return MetaEventChannel(channel = midiChannel, metaEventType = MetaEventDefinitions.MIDI_CHANNEL)
 	}
 
-	//0xFF21 - //Also has a 01 after the 21, and then a byte (0 - 127) Identifing the port number.
+	//0xFF21 - //Also has a 01 after the 21, and then a byte (0 - 127) identifying the port number.
+	//This appears in some documents as optional and other as obsolete
 	private fun parsePortSelection(startIdx:AtomicInteger) : IEvent?
 	{
 		val constByte:UByte = m_Data!![startIdx.get()].toUByte()
@@ -126,8 +129,7 @@ class MetaEventParser
 
 		Printer.printUInt8AsHex(portNumber)
 
-//		return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.PORT_SELECTION)
-		return null
+		return MetaEventOutputPort(PortNumber = portNumber,  metaEventType = MetaEventDefinitions.PORT_SELECTION)
 	}
 
 	//All 0xFF5[0 - F]
@@ -158,8 +160,7 @@ class MetaEventParser
 
 		Printer.printUInt32AsHex(tempoValue)
 
-//		return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.TEMPO)
-		return null
+		return MetaEventSetTempo(tempo = tempoValue, metaEventType = MetaEventDefinitions.TEMPO)
 	}
 
 	//0xFF54 -
@@ -196,8 +197,12 @@ class MetaEventParser
 		Printer.printByteValuesAsHex(hours, minutes, seconds, milliseconds)
 		Printer.printByteValuesAsHex(fractionalFrames)
 
-//		return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.SMPTE)
-		return null
+		return MetaEventSMPTEOffset(hour = hours,
+												minute = minutes,
+												seconds = seconds,
+												millisec = milliseconds,
+												fractionalFrames = fractionalFrames,
+												metaEventType = MetaEventDefinitions.SMPTE)
 	}
 
 	//0xFF58 -
@@ -231,16 +236,14 @@ class MetaEventParser
 		Printer.printByteValuesAsHex(midiClocksInMetronomeClick)
 		Printer.printByteValuesAsHex(numberNotated32ndNotes)
 
-//		return MetaEvent(eventTimeDelta: m_TimeDelta,
-//			trackTiming: timing,
-//			numberNotated32ndNotes: numberNotated32ndNotes,
-//			midiClocksInMetronomeClick: midiClocksInMetronomeClick,
-//			metaeventType:.TIME_SIGNATURE)
-		return null
+		return MetaEventTimeSignature(timeSignature= timing,
+												clockClicks = midiClocksInMetronomeClick,
+												numberOf32ndNotes = numberNotated32ndNotes,
+												metaEventType = MetaEventDefinitions.TIME_SIGNATURE)
 	}
 
 	//0xFF59 -
-	private fun parseMiniTimeSignature(startIdx:AtomicInteger) : IEvent?
+	private fun parseKeySignature(startIdx:AtomicInteger) : IEvent?
 	{
 		val constByte:UByte = m_Data!![startIdx.get()].toUByte()
 		startIdx.incrementAndGet()
@@ -265,84 +268,62 @@ class MetaEventParser
 		val trackKey:MusicalKey = Utils.valuesToMusicalKey(numberSharpsFlats, MajorMinorKey)
 		//Printer.printMessage(MusicalKey.musicalKeyToString(trackKey))
 
-//		return MetaEvent(eventTimeDelta: m_TimeDelta, trackKey:trackKey, metaeventType:.MINI_TIME_SIGNATURE)
-		return null
+		return MetaEventKeySignature(keySignature = trackKey, metaEventType = MetaEventDefinitions.KEY_SIGNATURE)
 	}
 
-	//Events with 0xFF7[0 - F]
-
-	//0xFF7F -
-	private fun parseSpecialSequence(startIdx:AtomicInteger) : IEvent?
+	/**
+	 All meta-text events are 0xFF0[1 - F]
+	 NOTE: In the text events, there is a size of the text + 1. It seems this is
+	 a value of 0x00 for the string's null terminator. ie: '\0'
+	 0xFF0[1 - F], //Followed by LEN, TEXT. NOTE: The 0xFF01 - 0xFF0F are all reserved for text messages.
+	 Covers messages:
+	 0xFF01
+	 0xFF02
+	 0xFF03
+	 0xFF04
+	 0xFF05
+	 0xFF06
+	 0xFF07
+	*/
+	private fun parseTextEvent(startIdx:AtomicInteger, eventType:MetaEventDefinitions) : IEvent?
 	{
-		//return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.SPECIAL_SEQUENCE)
-		return null
-	}
+		var metaeventType:MetaEventDefinitions
 
-	//All meta-text events are 0xFF0[1 - F]
-	//NOTE: In the text events, there is a size of the text + 1. It seems this is
-	//a value of 0x00 for the string's null terminator. ie: '\0'
-	//0xFF01, //Followed by LEN, TEXT. NOTE: The 0xFF01 - 0xFF0F are all reserved for text messages.
-	private fun parseTextEvent(startIdx:AtomicInteger) : IEvent?
-	{
-		//return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.TEXT_INFO)
-		return null
-	}
-
-	//0xFF02 -
-	private fun parseCopyright(startIdx:AtomicInteger) : IEvent?
-	{
-		//return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.COPYRIGHT)
-		return null
-	}
-
-	//0xFF03 -
-	private fun parseTextSequence(startIdx:AtomicInteger) : IEvent?
-	{
-		val textLen:UInt = Utils.readVariableLengthValue(startIdx, m_Data!!) ?: 0u
-
-		var textInfo:String
-		val textData:ArrayList<UByte> = ArrayList<UByte>()
-
-		//We have characters which were read in as unsigned bytes, so
-		//we need to isolate the character bytes to get into a string.
-		for (idx in 0..textLen.toInt()) {
-			textData.add(m_Data!![idx + startIdx.get()].toUByte())
+		when(eventType) {
+			MetaEventDefinitions.COPYRIGHT -> {metaeventType = MetaEventDefinitions.COPYRIGHT}
+			MetaEventDefinitions.TEXT_INFO -> {metaeventType = MetaEventDefinitions.TEXT_INFO}
+			MetaEventDefinitions.TEXT_LYRIC -> {metaeventType = MetaEventDefinitions.TEXT_LYRIC}
+			MetaEventDefinitions.TEXT_MARKER -> {metaeventType = MetaEventDefinitions.TEXT_MARKER}
+			MetaEventDefinitions.TEXT_SEQUENCE -> {metaeventType = MetaEventDefinitions.TEXT_SEQUENCE}
+			MetaEventDefinitions.TEXT_CUE_POINT -> {metaeventType = MetaEventDefinitions.TEXT_CUE_POINT}
+			MetaEventDefinitions.TEXT_INSTRUMENT -> {metaeventType = MetaEventDefinitions.TEXT_INSTRUMENT}
+			else -> { return null}
 		}
 
-		textInfo = textData.toString()
+		val strLen:UInt? = Utils.readVariableLengthValue(startIdx, m_Data!!)
 
-		startIdx.addAndGet(textLen.toInt())
-		Printer.printMessage(textInfo)
+		if( (strLen == null) || (strLen == 0u) || (strLen.toInt() < 0) ) return null
 
-//		return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.TEXT_SEQUENCE)
-		return null
+		val s:String = Utils.bytesToString(strLen.toInt(), startIdx, m_Data!!)
+
+		return MetaEventText(textInfo = s, metaEventType = metaeventType)
 	}
 
-	//0xFF04 -
-	private fun parseTextInstrument(startIdx:AtomicInteger) : IEvent?
-	{
-		//return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.TEXT_INSTRUMENT)
-		return null
-	}
+	//Manufacturer specific events with 0xFF7[0 - F]
 
-	//0xFF05 -
-	private fun parseTextLyric(startIdx:AtomicInteger) : IEvent?
+	//0xFF70 - 0xFF7F
+	private fun parseSpecialSequence(startIdx:AtomicInteger) : IEvent?
 	{
-		//return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.TEXT_LYRIC)
-		return null
-	}
+		//Even though this code does not implement manufacturer specific code, we still need to process
+		//this message by reading off the appropriate bytes so that our buffer pointer does not get
+		//out of sync and cause a corrupt read.
 
-	//0xFF06 -
-	private fun parseTextMarker(startIdx:AtomicInteger) : IEvent?
-	{
-		//return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.TEXT_MARKER)
-		return null
-	}
+		val len:UByte = m_Data!![startIdx.get()].toUByte()
+		startIdx.incrementAndGet()
 
-	//0xFF07 -
-	private fun parseTextCuePoint(startIdx:AtomicInteger) : IEvent?
-	{
-		//return MetaEvent(eventTimeDelta: m_TimeDelta, metaeventType:.TEXT_CUE_POINT)
+		if(len > 0u)
+			startIdx.addAndGet(len.toInt())
+
 		return null
 	}
 }

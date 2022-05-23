@@ -64,7 +64,7 @@ enum class MetaEventDefinitions(val num:UShort) {
     TEMPO(0xFF51u),
     SMPTE(0xFF54u),
     TIME_SIGNATURE(0xFF58u),
-    MINI_TIME_SIGNATURE(0xFF59u),
+    KEY_SIGNATURE(0xFF59u),
     SPECIAL_SEQUENCE(0xFF7Fu)
 }
 
@@ -380,6 +380,7 @@ enum class MidiNote(val num:UByte) {
 }
 
 enum class MusicalKey {
+	UNKNOWN,
 	//Circle of 5ths. Major and relative minor keys.
     C_MAJ,
     A_MIN,

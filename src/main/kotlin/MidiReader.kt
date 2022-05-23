@@ -7,8 +7,11 @@ class MidiReader
 	private var m_MidiData:ByteArray? = null
 
 	//The event parsers
-	private lateinit var m_MetaParser:MetaEventParser
-	private lateinit var m_MidiParser:MidiEventParser
+//	private lateinit var m_MetaParser:MetaEventParser
+//	private lateinit var m_MidiParser:MidiEventParser
+
+	private val m_MetaParser:MetaEventParser by lazy {MetaEventParser()}
+	private val m_MidiParser:MidiEventParser by lazy { MidiEventParser() }
 
 	fun openMidiFile(path:String) : Boolean
 	{
@@ -157,17 +160,17 @@ class MidiReader
 	//data is done in one of the event parsing classes - not necessarily from here within the reader.
 	private fun parseEventData(startIdx:AtomicInteger, timeDelta:UInt) : IEvent?
 	{
-		if( (startIdx.get() < 0) || (startIdx.get() < m_MidiData!!.size) ) return null
+		if( (startIdx.get() < 0) || (startIdx.get() >= m_MidiData!!.size) ) return null
 
 		val eventByte1:UByte = m_MidiData!![startIdx.get()].toUByte()
 
-		if(eventByte1 == META_EVENT_IDENFIFIER) { //Is it a .META_EVENT
-			return m_MetaParser.parseMetaEvent(startIdx, timeDelta, m_MidiData!!) //You'll re-read the first byte of the meta record
+		return if(eventByte1 == META_EVENT_IDENFIFIER) { //Is it a .META_EVENT
+			m_MetaParser.parseMetaEvent(startIdx, timeDelta, m_MidiData!!) //You'll re-read the first byte of the meta record
 		}
 		//NOTE - This will include the system exclusive message as trying to process all the specific manufactures isn't realistic for a general MIDI parser.
 		// users of this source will need to specifically develop the parsing and event structs specific to a MIDI device they want to handle the sysex event.
 		else { //Is it a .MIDI_EVENT
-			return m_MidiParser.parseMidiEvent(startIdx, timeDelta, m_MidiData!!)
+			m_MidiParser.parseMidiEvent(startIdx, timeDelta, m_MidiData!!)
 		}
 	}
 }

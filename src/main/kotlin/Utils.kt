@@ -78,6 +78,26 @@ class Utils
 			return X
 		}
 
+		fun bytesToString(numberOfBytes:Int, startIdx:AtomicInteger, data:ByteArray) : String
+		{
+			var strText:String = ""
+
+			for(idx in 0 until numberOfBytes) {
+				var charBegin:UByte = data!![startIdx.get()].toUByte()
+
+				//ASCII 33 - 126 are the printable characters
+				if( (charBegin >= 33u) && (charBegin <= 126u) ) {
+					var c = Char(charBegin.toInt())
+					strText += c
+				}
+
+				startIdx.incrementAndGet()
+			}
+
+			return strText
+		}
+
+
 		//I think this really will only ever be a UInt32 - MAX!
 		//The pais returned is the new index followed by the variables length bytes read
 		fun readVariableLengthValue(startIdx:AtomicInteger, data:ByteArray) : UInt?

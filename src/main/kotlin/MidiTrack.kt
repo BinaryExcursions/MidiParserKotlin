@@ -1,7 +1,8 @@
 class MidiTrack
 {
 	private var m_TrackBlockTitle:UInt = 0u
-	private lateinit var m_Events:ArrayList<IEvent>
+	private val m_Events:ArrayList<IEvent> by lazy { ArrayList<IEvent>() }
+
 	private var m_TrackIndex:Int = -1 //Will this be 0 based????? To be determined
 
 	//--Holders until I know more about these variables
@@ -49,7 +50,7 @@ class MidiTrack
 			TrackEventType.SYSEX_EVENT ->
 				return processSystemExclusionEvent(event as SysExclusionEvent)
 			TrackEventType.META_EVENT ->
-				return processMetaEvent(event as MetaEvent)
+				return processMetaEvent(event)
 			TrackEventType.SYSREALTIME_EVENT ->
 				return processSystemRealtimeEvent(event as SysRealtimeEvent)
 		}
@@ -81,9 +82,23 @@ class MidiTrack
 		return bRetStat
 	}
 
-	private fun processMetaEvent(event:MetaEvent) : Boolean
+	private fun processMetaEvent(event:IEvent) : Boolean
 	{
-		return true
+		var bRetStat:Boolean = true
+
+		when(event) {
+			is MetaEventText -> {}
+			is MetaEventChannel -> {}
+			is MetaEventSetTempo -> {}
+			is MetaEventOutputPort -> {}
+			is MetaEventSMPTEOffset -> {}
+			is MetaEventKeySignature -> {}
+			is MetaEventTimeSignature -> {}
+			is MetaEventSequenceNumber -> {}
+			else -> {bRetStat = false}
+		}
+
+		return bRetStat
 	}
 
 	private fun processSystemExclusionEvent(event:SysExclusionEvent) : Boolean
@@ -193,7 +208,6 @@ class MidiTrack
 
 		return true
 	}
-
 
 	private fun processStandardControlMessage(event:MidiControlChangeEvent) : Boolean
 	{
